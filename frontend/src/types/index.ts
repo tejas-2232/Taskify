@@ -63,6 +63,12 @@ export interface RegisterData {
   name?: string;
 }
 
+// Add missing AuthResponse interface
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+
 export interface TasksResponse {
   tasks: Task[];
   pagination: {
