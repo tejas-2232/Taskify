@@ -50,9 +50,19 @@ temp/
 key.json
 credentials/
 service-account-key.json
+**/credentials/
+**/*service-account*.json
+**/taskmanager-*.json
 
 # Prisma
 backend/prisma/migrations/
+backend/prisma/dev.db
+backend/prisma/*.db
+
+# Upload directories
+backend/uploads/
+**/uploads/*
+!**/uploads/.gitkeep
 
 # Coverage reports
 coverage/
