@@ -324,10 +324,10 @@ const TasksPage: React.FC = () => {
             )}
 
             {/* Enhanced Pagination */}
-            {pagination && pagination.totalPages > 1 && (
+            {pagination && pagination.pages > 1 && (
               <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200/50">
                 <div className="text-sm text-gray-600">
-                  Page {pagination.page} of {pagination.totalPages} • {pagination.total} total tasks 🎯
+                  Page {pagination.page} of {pagination.pages} • {pagination.total} total tasks 🎯
                 </div>
                 <div className="flex space-x-2">
                   <button
@@ -339,7 +339,7 @@ const TasksPage: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setPage(page + 1)}
-                    disabled={page === pagination.totalPages}
+                    disabled={page === pagination.pages}
                     className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   >
                     Next
