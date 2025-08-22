@@ -1,0 +1,239 @@
+name: Deploy to Google Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GAR_LOCATION: us-central1
+  REPOSITORY: taskmanager
+  SERVICE_BACKEND: taskmanager-backend
+  SERVICE_FRONTEND: taskmanager-frontend
+  REGION: us-central1
+
+jobs:
+  test:
+    name: Test Application
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: taskmanager_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: ./backend
+        run: npx prisma generate
+
+      - name: Run Prisma migrations
+        working-directory: ./backend
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/taskmanager_test?schema=public
+
+      - name: Build backend
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+  deploy:
+    name: Deploy to Google Cloud
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker to use gcloud as credential helper
+        run: gcloud auth configure-docker $GAR_LOCATION-docker.pkg.dev
+
+      - name: Create Artifact Registry repository
+        run: |
+          gcloud artifacts repositories create $REPOSITORY \
+            --repository-format=docker \
+            --location=$GAR_LOCATION \
+            --description="Task Manager application images" \
+            --project=$PROJECT_ID || true
+
+      - name: Build and push backend image
+        run: |
+          cd backend
+          docker build -t $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_BACKEND:$GITHUB_SHA .
+          docker push $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_BACKEND:$GITHUB_SHA
+
+      - name: Build and push frontend image
+        run: |
+          cd frontend
+          docker build -t $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_FRONTEND:$GITHUB_SHA .
+          docker push $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_FRONTEND:$GITHUB_SHA
+
+      - name: Create Cloud SQL instance
+        run: |
+          gcloud sql instances create taskmanager-db \
+            --database-version=POSTGRES_15 \
+            --tier=db-f1-micro \
+            --region=$REGION \
+            --storage-type=SSD \
+            --storage-size=10GB \
+            --project=$PROJECT_ID || true
+
+      - name: Create database
+        run: |
+          gcloud sql databases create taskmanager \
+            --instance=taskmanager-db \
+            --project=$PROJECT_ID || true
+
+      - name: Create database user
+        run: |
+          gcloud sql users create taskmanager-user \
+            --instance=taskmanager-db \
+            --password=${{ secrets.DB_PASSWORD }} \
+            --project=$PROJECT_ID || true
+
+      - name: Create Cloud Storage bucket
+        run: |
+          gsutil mb -p $PROJECT_ID -c STANDARD -l $REGION gs://$PROJECT_ID-taskmanager-files || true
+
+      - name: Deploy backend to Cloud Run
+        run: |
+          gcloud run deploy $SERVICE_BACKEND \
+            --image $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_BACKEND:$GITHUB_SHA \
+            --platform managed \
+            --region $REGION \
+            --allow-unauthenticated \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 10 \
+            --set-env-vars="DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+            --set-env-vars="JWT_SECRET=${{ secrets.JWT_SECRET }}" \
+            --set-env-vars="JWT_EXPIRES_IN=7d" \
+            --set-env-vars="NODE_ENV=production" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT_ID=$PROJECT_ID" \
+            --set-env-vars="GOOGLE_CLOUD_STORAGE_BUCKET=$PROJECT_ID-taskmanager-files" \
+            --set-env-vars="FRONTEND_URL=https://$SERVICE_FRONTEND-${{ steps.auth.outputs.credentials_file_path | hashFiles }}-$REGION.run.app" \
+            --project=$PROJECT_ID
+
+      - name: Get backend service URL
+        id: backend-url
+        run: |
+          BACKEND_URL=$(gcloud run services describe $SERVICE_BACKEND --platform managed --region $REGION --format 'value(status.url)' --project=$PROJECT_ID)
+          echo "url=$BACKEND_URL" >> $GITHUB_OUTPUT
+
+      - name: Deploy frontend to Cloud Run
+        run: |
+          # Create a temporary Dockerfile for frontend with backend URL
+          cd frontend
+          cat > Dockerfile.production << EOF
+          FROM nginx:alpine
+          COPY dist /usr/share/nginx/html
+          COPY nginx.conf /etc/nginx/nginx.conf
+          
+          # Add environment variable substitution
+          RUN apk add --no-cache gettext
+          COPY entrypoint.sh /entrypoint.sh
+          RUN chmod +x /entrypoint.sh
+          
+          EXPOSE 80
+          ENTRYPOINT ["/entrypoint.sh"]
+          CMD ["nginx", "-g", "daemon off;"]
+          EOF
+          
+          # Create entrypoint script for runtime environment variable substitution
+          cat > entrypoint.sh << 'EOF'
+          #!/bin/sh
+          # Replace API_URL placeholder in built files
+          find /usr/share/nginx/html -name "*.js" -exec sed -i "s|__API_URL__|${API_URL}|g" {} \;
+          exec "$@"
+          EOF
+          
+          # Build with production Dockerfile
+          docker build -f Dockerfile.production -t $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_FRONTEND:$GITHUB_SHA .
+          docker push $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_FRONTEND:$GITHUB_SHA
+          
+          gcloud run deploy $SERVICE_FRONTEND \
+            --image $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_FRONTEND:$GITHUB_SHA \
+            --platform managed \
+            --region $REGION \
+            --allow-unauthenticated \
+            --memory 256Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 5 \
+            --set-env-vars="API_URL=${{ steps.backend-url.outputs.url }}" \
+            --project=$PROJECT_ID
+
+      - name: Run database migrations
+        run: |
+          # Get Cloud SQL connection name
+          CONNECTION_NAME=$(gcloud sql instances describe taskmanager-db --format="value(connectionName)" --project=$PROJECT_ID)
+          
+          # Run migrations using Cloud SQL Proxy
+          docker run --rm \
+            -v "${{ github.workspace }}/backend:/workspace" \
+            -w /workspace \
+            --network host \
+            node:18-alpine sh -c "
+              npm install &&
+              npx prisma generate &&
+              npx prisma migrate deploy
+            "
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Output deployment URLs
+        run: |
+          BACKEND_URL=$(gcloud run services describe $SERVICE_BACKEND --platform managed --region $REGION --format 'value(status.url)' --project=$PROJECT_ID)
+          FRONTEND_URL=$(gcloud run services describe $SERVICE_FRONTEND --platform managed --region $REGION --format 'value(status.url)' --project=$PROJECT_ID)
+          
+          echo "🚀 Deployment completed successfully!"
+          echo "Backend URL: $BACKEND_URL"
+          echo "Frontend URL: $FRONTEND_URL"
+          echo "📧 Please update CORS settings in backend if needed."
