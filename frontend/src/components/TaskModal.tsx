@@ -252,7 +252,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
   const deleteFileMutation = useMutation(
     (fileId: string) => filesApi.deleteFile(fileId),
     {
-      onSuccess: () => {
+      onSuccess: (_, fileId) => { // Get fileId from the second parameter
         toast.success('🗑️ File removed successfully!');
         // Refresh uploaded files list
         if (task) {
