@@ -1,0 +1,65 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  tasks     Task[]
+  files     File[]
+
+  @@map("users")
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  status      String @default("PENDING")
+  priority    String @default("MEDIUM")
+  dueDate     DateTime?  @map("due_date")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  
+  userId      String     @map("user_id")
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  files       File[]
+
+  @@map("tasks")
+}
+
+model File {
+  id           String   @id @default(uuid())
+  filename     String   // Generated filename for storage
+  originalName String   @map("original_name") // Original filename from user
+  mimeType     String   @map("mime_type")
+  size         Int
+  gcsPath      String   @map("gcs_path") // Google Cloud Storage path
+  createdAt    DateTime @default(now()) @map("created_at")
+  
+  userId       String   @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  taskId       String?  @map("task_id")
+  task         Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@map("files")
+}
+
+// Enums replaced with strings for SQLite compatibility
+// TaskStatus: PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+// Priority: LOW, MEDIUM, HIGH, URGENT
