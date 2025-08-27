@@ -1,15 +1,21 @@
-# Backend Dockerfile
-FROM node:18-alpine AS builder
+# Backend Dockerfile - Debian version
+FROM node:18-slim AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy package files first for better caching
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install all dependencies (including dev dependencies for build)
+RUN npm install && npm cache clean --force
 
 # Generate Prisma client
 RUN npx prisma generate
@@ -21,22 +27,32 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:18-slim AS production
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install system dependencies and dumb-init
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    dumb-init \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create app directory and user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
+RUN groupadd -r nodejs && useradd -r -g nodejs nodejs
 
 WORKDIR /app
 
-# Copy built application and dependencies from builder stage
+# Copy package files
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install only production dependencies
+RUN npm install --only=production && npm cache clean --force
+
+# Generate Prisma client for production
+RUN npx prisma generate
+
+# Copy built application from builder stage
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nodejs:nodejs /app/package*.json ./
 
 # Switch to non-root user
 USER nodejs
