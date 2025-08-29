@@ -73,3 +73,6 @@ coverage/
 
 # TypeScript cache
 *.tsbuildinfo
+
+#prompt md
+prompt.md
