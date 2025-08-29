@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { useAuth } from '../contexts/AuthContext';
+import { useQuery, useMutation, useQueryClient } from 'react-query'; // ✅ Keep useQueryClient - it's used!
+// Remove useAuth import since it's not used
 import { filesApi } from '../lib/api';
 import { formatDate, formatFileSize } from '../lib/utils';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -12,9 +12,9 @@ import {
   Search,
   Cloud,
   FolderOpen,
-  Star,
-  Zap,
-  Award,
+  Star,    // ✅ Keep - used in component
+  Zap,     // ✅ Keep - used in component  
+  Award,   // ✅ Keep - used in component
   Image,
   File,
   Archive,
@@ -24,8 +24,8 @@ import {
 import toast from 'react-hot-toast';
 
 const FilesPage: React.FC = () => {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
+  // Remove: const { user } = useAuth(); // ✅ Not used
+  const queryClient = useQueryClient(); // ✅ Keep - used in mutations
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
