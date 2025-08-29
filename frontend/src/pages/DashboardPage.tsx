@@ -7,7 +7,6 @@ import { formatDate, getTaskStatusColor, getTaskPriorityColor, isOverdue } from 
 import LoadingSpinner from '../components/LoadingSpinner';
 import TaskModal from '../components/TaskModal';
 import { 
-  CheckSquare, 
   Clock, 
   AlertTriangle, 
   CheckCircle,
@@ -15,7 +14,6 @@ import {
   ArrowRight,
   Calendar,
   FileText,
-  TrendingUp,
   Target,
   Zap,
   Star,
@@ -295,7 +293,7 @@ const DashboardPage: React.FC = () => {
                 </div>
                 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {recentTasks.map((task, index) => (
+                  {recentTasks.map((task) => (
                     <Link
                       key={task.id}
                       to={`/tasks/${task.id}`}
