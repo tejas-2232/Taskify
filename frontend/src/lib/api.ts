@@ -10,7 +10,6 @@ import {
   RegisterData,
   AuthResponse,
   TaskStats,
-  ApiError,
 } from '../types';
 
 // Create axios instance
