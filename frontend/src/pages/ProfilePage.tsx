@@ -6,15 +6,11 @@ import {
   User, 
   Mail, 
   Calendar, 
-  Edit, 
+  Shield, 
+  Edit3, 
   Save, 
   X,
-  Award,
-  Star,
-  Zap,
-  Target,
-  TrendingUp,
-  Shield
+  CheckCircle,
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 
@@ -153,7 +149,7 @@ const ProfilePage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <div className="bg-green-100 p-3 rounded-xl mb-3 inline-block">
-                  <TrendingUp className="w-6 h-6 text-green-600" />
+                  <CheckCircle className="w-6 h-6 text-green-600" />
                 </div>
                 <p className="text-sm font-medium text-gray-700">Progress Level</p>
                 <p className="text-2xl font-bold text-gray-900">Rising</p>
@@ -169,7 +165,7 @@ const ProfilePage: React.FC = () => {
           <div className="p-6 border-b border-gray-200/50">
             <div className="flex items-center justify-between">
               <h3 className="text-2xl font-bold text-gray-900 flex items-center">
-                <Star className="w-6 h-6 mr-2 text-purple-600" />
+                <CheckCircle className="w-6 h-6 mr-2 text-purple-600" />
                 Your Profile ✨
               </h3>
               {!isEditing && (
@@ -177,7 +173,7 @@ const ProfilePage: React.FC = () => {
                   onClick={() => setIsEditing(true)}
                   className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium rounded-xl shadow-sm hover:shadow-md transition-all duration-200"
                 >
-                  <Edit className="w-4 h-4 mr-2" />
+                  <Edit3 className="w-4 h-4 mr-2" />
                   Edit Profile
                 </button>
               )}
@@ -276,7 +272,7 @@ const ProfilePage: React.FC = () => {
                   <div className="bg-gradient-to-br from-amber-50 to-orange-50 p-6 rounded-xl border border-amber-100">
                     <div className="flex items-center mb-3">
                       <div className="bg-amber-100 p-2 rounded-lg mr-3">
-                        <Award className="w-5 h-5 text-amber-600" />
+                        <CheckCircle className="w-5 h-5 text-amber-600" />
                       </div>
                       <h4 className="font-bold text-gray-900">Achievement</h4>
                     </div>
