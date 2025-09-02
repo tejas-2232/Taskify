@@ -1,4 +1,4 @@
-# Backend Dockerfile - Debian version
+# Backend Dockerfile - Fixed version
 FROM node:18-slim AS builder
 
 # Set working directory
@@ -48,8 +48,11 @@ COPY prisma ./prisma/
 # Install only production dependencies
 RUN npm install --only=production && npm cache clean --force
 
-# Generate Prisma client for production
+# Generate Prisma client
 RUN npx prisma generate
+
+# ✅ FIX: Set permissions BEFORE switching user
+RUN chown -R nodejs:nodejs /app/node_modules/.prisma
 
 # Copy built application from builder stage
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
